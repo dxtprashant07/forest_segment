@@ -1,0 +1,7 @@
+project_id = "grqkitexafsftzaoiuua"
+
+[functions.fetch-satellite]
+verify_jwt = false
+
+[functions.ml-predict]
+verify_jwt = false
