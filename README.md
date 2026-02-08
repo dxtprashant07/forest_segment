@@ -1,14 +1,54 @@
 # Satellite Imagery Segmentation & Deforestation Analysis
 
-This repository contains a **full-stack solution** for detecting forest cover change from bi-temporal Landsat 8 satellite imagery using **weak supervision** and **Deep Learning**.
+This repository contains a **full-stack solution** for forest cover analysis and deforestation detection from Landsat 8 satellite imagery.
 
 ---
 
-### What's Included
+## 🌲 Two ML Pipelines
 
-#### **Frontend (Web Application)**
+### 1. Forest Segmentation
+Generates pixel-level forest masks from single-date imagery using **Random Forest** classification.
 
-A React/Vite web application for visualization and interaction with the analysis results.
+**Source Notebook:** `Forest_Segmentation.ipynb`
+
+```
+Input: 9-band GeoTIFF (B, G, R, NIR, SWIR1, SWIR2, NDVI, NDWI, NBR)
+        ↓
+[Adaptive NDVI/NDWI Thresholding] → Initial Heuristic Mask
+        ↓
+[Random Forest Classifier] → Refined Forest Mask
+        ↓
+[Morphological Cleaning] → Binary Mask (1=Forest, 0=Background)
+        ↓
+Output: 256×256 Patches (NumPy + GeoTIFF)
+```
+
+---
+
+### 2. Change Detection (Deforestation)
+Detects forest cover changes between two dates using a **Siamese U-Net** deep learning model.
+
+**Source Notebook:** `Change_Detaction.ipynb`
+
+```
+Input: T1 Image + T2 Image (4-band: R, G, B, NIR)
+        ↓
+[NDVI Difference] → Δ NDVI
+        ↓
+[Otsu Thresholding] → Weak Supervision Mask
+        ↓
+[Patch Extraction] → Training Dataset
+        ↓
+[Siamese U-Net] → Change Probability Map
+        ↓
+Output: Binary Change Mask (1=Deforested, 0=No Change)
+```
+
+---
+
+## 📁 Repository Structure
+
+### **Frontend (Web Application)**
 
 | Folder/File | Description |
 |-------------|-------------|
@@ -16,93 +56,76 @@ A React/Vite web application for visualization and interaction with the analysis
 | **public/** | Static assets |
 | **supabase/** | Database configuration |
 | **index.html** | Application entry point |
-| **tailwind.config.ts** | Styling configuration |
 
 ---
 
-#### **Model Pipeline/** — ML Training Pipeline
-
-The core machine learning pipeline for forest change detection.
+### **Model Pipeline/** — ML Training Pipeline
 
 | File / Folder | Description |
 |---------------|-------------|
-| **src/data/** | Data loading, preprocessing, labeling, and dataset generation |
-| **src/models/** | Siamese U-Net architecture for change detection |
-| **src/training/** | Training loops, metrics (Dice, IoU), and checkpointing |
-| **tests/** | Comprehensive test suite for validation |
-| **prepare_data.py** | Script to generate dataset from GeoTIFFs |
-| **train.py** | Script to train the Siamese U-Net model |
-| **requirements.txt** | Python dependencies |
+| **src/data/loader.py** | Loads 9-band GeoTIFFs, validates GEE scaling |
+| **src/data/labeler.py** | Random Forest forest mask generation |
+| **src/data/generator.py** | Patch extraction for forest segmentation |
+| **src/data/weak_labeler.py** | NDVI difference + Otsu for change masks |
+| **src/data/dataset_builder.py** | Builds training dataset for change detection |
+| **src/data/dataset.py** | PyTorch Dataset class |
+| **src/models/change_detection.py** | Siamese U-Net architecture |
+| **src/training/** | Training loops, metrics (Dice, IoU), checkpointing |
+| **tests/** | Comprehensive test suite |
 
 ---
 
-### Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    DATA PREPARATION                         │
-│  GeoTIFF (T1, T2) → NDVI Diff → Otsu Threshold → Mask      │
-│  Random Forest for weak label refinement                    │
-└─────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────┐
-│                    MODEL TRAINING                           │
-│  Siamese U-Net (Shared Encoder) → Change Detection         │
-│  Loss: BCEWithLogitsLoss | Metrics: Dice, IoU              │
-└─────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────┐
-│                    WEB VISUALIZATION                        │
-│  React Frontend → Display Results → User Interaction        │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-### Quick Setup (ML Pipeline)
-
-**PowerShell**
+## 🚀 Quick Setup (ML Pipeline)
 
 ```powershell
-# Navigate to pipeline folder
 cd "Model Pipeline"
-
-# Create virtual environment
-python -m venv venv; .\venv\Scripts\Activate.ps1
-
-# Install dependencies
+python -m venv venv
+.\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
 ---
 
-### Run the Pipeline
+## 📋 Usage
 
-#### 1. Generate Change Mask from T1/T2 Images
+### **Pipeline 1: Forest Segmentation**
 
-```powershell
-python prepare_data.py --mode change_label --input_t1 path/to/T1.tif --input_t2 path/to/T2.tif --output_dir output
-```
-
-#### 2. Build Training Dataset
+Generate forest mask and patches from a single GeoTIFF:
 
 ```powershell
-python prepare_data.py --mode build_dataset --input_t1 T1.tif --input_t2 T2.tif --input_mask mask.tif --aoi_name Hasdeo --output_dir dataset
+python prepare_data.py --mode forest_prep --input_t1 path/to/image.tif --output_dir forest_output
 ```
 
-#### 3. Train the Model
+**Outputs:**
+- `images_npy/` — 256×256×9 patches
+- `masks_npy/` — Binary forest masks
+- `metadata.json` — Dataset statistics
+
+---
+
+### **Pipeline 2: Change Detection**
+
+**Step 1:** Generate weak supervision mask from T1/T2 pair:
+
+```powershell
+python prepare_data.py --mode change_label --input_t1 T1.tif --input_t2 T2.tif --output_dir change_output
+```
+
+**Step 2:** Build training dataset:
+
+```powershell
+python prepare_data.py --mode build_dataset --input_t1 T1.tif --input_t2 T2.tif --input_mask change_output/calculated_mask.tif --aoi_name Hasdeo --output_dir dataset
+```
+
+**Step 3:** Train Siamese U-Net:
 
 ```powershell
 python train.py --data_root dataset --epochs 60 --batch_size 8
 ```
 
-**Outputs:**
-* Checkpoints → `checkpoints/best_model.pth`
-* Training history → `results/training_history.png`
-
 ---
 
-### Run Tests
+## 🧪 Testing
 
 ```powershell
 python tests/test_comprehensive.py
@@ -110,54 +133,41 @@ python tests/test_comprehensive.py
 
 | Test | Component | Status |
 |------|-----------|--------|
-| 1 | Data Loader | ✅ |
-| 2 | RF Labeler | ✅ |
-| 3 | NDVI Diff Labeler | ✅ |
+| 1 | Data Loader (9-band) | ✅ |
+| 2 | RF Labeler (Forest Segmentation) | ✅ |
+| 3 | NDVI Diff Labeler (Change Detection) | ✅ |
 | 4 | Dataset Builder | ✅ |
 | 5 | PyTorch Dataset | ✅ |
 | 6 | Siamese U-Net | ✅ |
 | 7 | Training Loop | ✅ |
-| 8 | Metrics | ✅ |
+| 8 | Metrics (Dice, IoU) | ✅ |
 
 ---
 
-### Quick Setup (Frontend)
-
-```bash
-# Install dependencies
-npm install
-
-# Start development server
-npm run dev
-```
-
----
-
-### Troubleshooting
+## 🛠️ Troubleshooting
 
 | Issue | Fix |
 |-------|-----|
-| **rasterio import error** | Install GDAL first: `conda install -c conda-forge gdal` |
+| **rasterio import error** | Install GDAL: `conda install -c conda-forge gdal` |
 | **CUDA out of memory** | Reduce `--batch_size` or use CPU |
-| **Empty dataset** | Check if AOI filter matches your filenames |
-| **Git push fails (large files)** | Add `*.tif`, `*.npy` to `.gitignore` |
+| **Empty dataset** | Check if AOI filter matches filenames |
 
 ---
 
-### Notes
-
-* The pipeline uses **weak supervision** — ground truth is generated automatically using NDVI thresholding, not manual annotation.
-* The **Siamese U-Net** shares encoder weights for T1 and T2 images, enabling efficient change detection.
-* Modular design allows easy extension to new regions (AOIs) or different satellite sensors.
-* YAML-driven configuration planned for future releases.
-
----
-
-### Technologies
+## 🔬 Technologies
 
 | Component | Technology |
 |-----------|------------|
-| **ML Framework** | PyTorch |
-| **Data Processing** | Rasterio, NumPy, Scikit-learn |
+| **Forest Segmentation** | Scikit-learn (Random Forest) |
+| **Change Detection** | PyTorch (Siamese U-Net) |
+| **Data Processing** | Rasterio, NumPy |
 | **Frontend** | React, Vite, TypeScript, TailwindCSS |
 | **Database** | Supabase |
+
+---
+
+## 📊 Metrics
+
+- **Dice Score**: Overlap measure for segmentation quality
+- **IoU (Intersection over Union)**: Standard segmentation metric
+- **Precision/Recall**: Classification performance
