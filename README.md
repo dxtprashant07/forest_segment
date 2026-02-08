@@ -1,120 +1,128 @@
-# Satellite Imagery Segmentation & Deforestation Analysis
+# Satellite Imagery Segmentation & Deforestation Analysis — Pipeline
 
-This repository contains a **full-stack solution** for forest cover analysis and deforestation detection from Landsat 8 satellite imagery.
+This repository builds and evaluates a **deep learning pipeline** for forest segmentation and deforestation detection using Landsat 8 satellite imagery.
+It automates data ingestion, weak labeling, dataset generation, model training, and evaluation — with both Keras and PyTorch models.
 
----
+### What's included
 
-## 🌲 Two ML Pipelines
+#### Root files
 
-### 1. Forest Segmentation (mU-Net)
-Generates pixel-level forest masks from single-date imagery.
-
-| Stage | Method |
-|-------|--------|
-| **Data Prep** | Random Forest weak supervision |
-| **Model** | mU-Net (Keras/TensorFlow) |
-| **Input** | 9-band GeoTIFF |
-| **Output** | Binary forest mask |
-
-```
-GeoTIFF → [RF Weak Labels] → [mU-Net Training] → Forest Mask
-```
+* **prepare_data.py** — orchestrates data preparation (weak labeling, patch extraction)
+* **train_forest.py** — trains mU-Net for forest segmentation (Keras)
+* **train.py** — trains Siamese U-Net for change detection (PyTorch)
+* **requirements.txt** — dependencies list
+* **README.md** — project overview and workflow
 
 ---
 
-### 2. Change Detection (Siamese U-Net)
-Detects forest cover changes between two dates.
+#### src/ — main project modules
 
-| Stage | Method |
-|-------|--------|
-| **Data Prep** | NDVI Difference + Otsu |
-| **Model** | Siamese U-Net (PyTorch) |
-| **Input** | T1 + T2 images (4-band) |
-| **Output** | Change mask |
-
-```
-T1 + T2 → [NDVI Diff] → [Siamese U-Net] → Change Mask
-```
+| File / Folder | Description |
+|---------------|-------------|
+| **data/** | Data loading, preprocessing, weak labeling, dataset generation |
+| **models/** | Model architectures — mU-Net (Keras) and Siamese U-Net (PyTorch) |
+| **training/** | Training loops, metrics (Dice, IoU), checkpointing utilities |
 
 ---
 
-## 📁 Model Pipeline Structure
+#### tests/ — validation scripts
 
-| File | Description |
-|------|-------------|
-| **src/data/** | Data loading, preprocessing, labeling |
-| **src/models/forest_segmentation.py** | mU-Net (Keras) |
-| **src/models/change_detection.py** | Siamese U-Net (PyTorch) |
-| **src/training/** | Training loops, metrics |
-| **prepare_data.py** | Data preparation CLI |
-| **train_forest.py** | Forest segmentation training |
-| **train.py** | Change detection training |
+Contains test suites to verify pipeline components:
+
+* **test_models.py** — validates model architectures
+* **test_comprehensive.py** — end-to-end pipeline verification
+* **test_pipeline.py** — quick smoke test
 
 ---
 
-## 🚀 Quick Setup
+#### outputs (runtime)
+
+Created automatically when you run the training scripts.
+Stores:
+
+* Processed patches (`images_npy/`, `masks_npy/`)
+* Trained model files (`.keras`, `.pth`)
+* Training history and metrics
+* Checkpoints
+
+---
+
+### Quick setup
+
+**PowerShell**
 
 ```powershell
-cd "Model Pipeline"
-python -m venv venv
-.\venv\Scripts\Activate.ps1
+# Create virtual environment
+python -m venv venv; .\venv\Scripts\Activate.ps1
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
 ---
 
-## 📋 Usage
+### Run the full pipeline
 
-### Pipeline 1: Forest Segmentation
+#### Pipeline 1: Forest Segmentation (mU-Net)
 
 ```powershell
-# Step 1: Generate dataset (RF weak labels + patches)
+# Step 1: Generate dataset with RF weak labels
 python prepare_data.py --mode forest_prep --input_t1 image.tif --output_dir forest_dataset
 
-# Step 2: Train mU-Net
+# Step 2: Train mU-Net model
 python train_forest.py --data_root forest_dataset --epochs 150
 ```
 
+**Outputs:**
+
+* Patches → `forest_dataset/images_npy/`
+* Model → `output/Forest_Segmentation_Best.keras`
+
 ---
 
-### Pipeline 2: Change Detection
+#### Pipeline 2: Change Detection (Siamese U-Net)
 
 ```powershell
 # Step 1: Generate change mask
 python prepare_data.py --mode change_label --input_t1 T1.tif --input_t2 T2.tif --output_dir output
 
-# Step 2: Build dataset
+# Step 2: Build training dataset
 python prepare_data.py --mode build_dataset --input_t1 T1.tif --input_t2 T2.tif --input_mask output/calculated_mask.tif --aoi_name Region --output_dir dataset
 
 # Step 3: Train Siamese U-Net
 python train.py --data_root dataset --epochs 60
 ```
 
+**Outputs:**
+
+* Dataset → `dataset/train/`, `dataset/val/`, `dataset/test/`
+* Model → `checkpoints/best_model.pth`
+
 ---
 
-## 🧪 Testing
+### Run tests
 
 ```powershell
-python tests/test_models.py        # Model architectures
-python tests/test_comprehensive.py  # Full pipeline
+python tests/test_models.py
+python tests/test_comprehensive.py
 ```
-
-| Test | Status |
-|------|--------|
-| mU-Net (Keras) | ✅ |
-| Siamese U-Net (PyTorch) | ✅ |
-| Data Loader | ✅ |
-| RF Labeler | ✅ |
-| NDVI Labeler | ✅ |
-| Training Loop | ✅ |
 
 ---
 
-## 🔬 Technologies
+### Troubleshooting
 
-| Component | Technology |
-|-----------|------------|
-| **Forest Segmentation** | TensorFlow/Keras (mU-Net) |
-| **Change Detection** | PyTorch (Siamese U-Net) |
-| **Data Processing** | Rasterio, Scikit-learn |
-| **Frontend** | React, Vite, TailwindCSS |
+| Issue | Fix |
+|-------|-----|
+| **rasterio import error** | Install GDAL: `conda install -c conda-forge gdal` |
+| **CUDA out of memory** | Reduce `--batch_size` or use CPU |
+| **Empty dataset** | Check if image dimensions match `--patch_size` |
+| **Module import errors** | Run from project root: `python train.py` |
+
+---
+
+### Notes
+
+* **Forest Segmentation** uses Random Forest for weak label generation, then trains a Keras mU-Net.
+* **Change Detection** uses NDVI differencing for weak labels, then trains a PyTorch Siamese U-Net.
+* Both pipelines support GPU acceleration when available.
+* The modular design allows running stages independently or extending with new models.
